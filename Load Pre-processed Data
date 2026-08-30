@@ -1,0 +1,7 @@
+if PREPROCESS:
+    features = np.load("/kaggle/working/feature_data.npy")
+    labels = np.load("/kaggle/working/feature_data.npy")
+else:
+    features = np.load("/kaggle/input/preprocessed-data-include/feature_data.npy")
+    labels = np.load("/kaggle/input/preprocessed-data-include/feature_labels.npy")
+print(features.shape, labels.shape)
