@@ -1,0 +1,40 @@
+optimizer = tf.optimizers.AdamW(learning_rate=1e-3, weight_decay=1e-5, clipnorm=1.0)
+def scce_with_ls(y_true, y_pred):
+    # One Hot Encode Sparsely Encoded Target Sign
+    y_true = tf.cast(y_true, tf.int32)
+    y_true = tf.one_hot(y_true, NUM_CLASSES, axis=1)
+    y_true = tf.squeeze(y_true, axis=2)
+    # Categorical Crossentropy with native label smoothing support
+    return tf.keras.losses.categorical_crossentropy(y_true, y_pred, label_smoothing=0.25)
+def lrfn(current_step, num_warmup_steps, lr_max, num_cycles=0.50, num_training_steps=N_EPOCHS):
+    
+    if current_step < num_warmup_steps:
+        if WARMUP_METHOD == 'log':
+            return lr_max * 0.10 ** (num_warmup_steps - current_step)
+        else:
+            return lr_max * 2 ** -(num_warmup_steps - current_step)
+    else:
+        progress = float(current_step - num_warmup_steps) / float(max(1, num_training_steps - num_warmup_steps))
+
+        return max(0.0, 0.5 * (1.0 + math.cos(math.pi * float(num_cycles) * 2.0 * progress))) * lr_max
+LR_SCHEDULE = [lrfn(step, num_warmup_steps=N_WARMUP_EPOCHS, lr_max=LR_MAX, num_cycles=0.50) for step in range(N_EPOCHS)]
+# Learning Rate Callback
+lr_callback = tf.keras.callbacks.LearningRateScheduler(lambda step: LR_SCHEDULE[step], verbose=1)
+class WeightDecayCallback(tf.keras.callbacks.Callback):
+    def __init__(self, wd_ratio=WD_RATIO):
+        self.step_counter = 0
+        self.wd_ratio = wd_ratio
+    
+    def on_epoch_begin(self, epoch, logs=None):
+        model.optimizer.weight_decay = model.optimizer.learning_rate * self.wd_ratio
+        print(f'learning rate: {model.optimizer.learning_rate.numpy():.2e}, weight decay: {model.optimizer.weight_decay.numpy():.2e}')
+
+model.compile(optimizer=optimizer,
+              loss=scce_with_ls,
+              metrics=["accuracy","sparse_top_k_categorical_accuracy"])
+tf.keras.utils.plot_model(model, show_shapes=True, to_file='model.png')
+history = model.fit(train_x, train_y, epochs=100, validation_data=(val_x, val_y), batch_size=64,
+                   callbacks=[
+                    lr_callback,
+                    WeightDecayCallback()])
+model.save_weights('model.hdf5')
