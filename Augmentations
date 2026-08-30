@@ -1,0 +1,64 @@
+class Augmentation(tf.keras.layers.Layer):
+    def __init__(self, noise_std):
+        super(Augmentation, self).__init__()
+        self.noise_std = noise_std
+    
+    def add_noise(self, t):
+        B = tf.shape(t)[0]
+        return tf.where(
+            t == 0.0,
+            0.0,
+            t + tf.random.normal([B,1,1,tf.shape(t)[3]], 0, self.noise_std),
+        )
+    
+    def call(self, lips0, left_hand0, pose0, right_hand0, training=False):
+        if training:
+            # Lips
+            lips0 = self.add_noise(lips0)
+            # Left Hand
+            left_hand0 = self.add_noise(left_hand0)
+            # Pose
+            pose0 = self.add_noise(pose0)
+            
+            right_hand0 = self.add_noise(right_hand0)
+        
+        return lips0, left_hand0, pose0, right_hand0
+
+inputs = tf.keras.Input(shape=(30, 104, 3))
+
+# inputs = augment_fn(inputs_l, max_len=30)
+lips = tf.slice(inputs, [0, 0, 0, 0], [-1, 30, 40, 3])
+lh = tf.slice(inputs, [0, 0, 40, 0], [-1, 30, 21, 3])
+po = tf.slice(inputs, [0, 0, 61, 0], [-1, 30, 22, 3])
+rh = tf.slice(inputs, [0, 0, 83, 0], [-1, 30, 21, 3])
+
+augmentation_layer = Augmentation(noise_std=0.1)
+lips, lh, po, rh = augmentation_layer(lips, lh, po, rh, training=False)
+
+lips = tf.keras.layers.Reshape((30, 40*3))(lips)
+lh = tf.keras.layers.Reshape((30, 21*3))(lh)
+po = tf.keras.layers.Reshape((30, 22*3))(po)
+rh = tf.keras.layers.Reshape((30, 21*3))(rh)
+
+# print(lips.shape)
+#reshape_layer = tf.keras.layers.Reshape((30, 104*3))(inputs)
+
+embedding_units = [256, 256] # tune this# dense encoder model
+lips = Dense(512, activation="gelu")(lips)
+lh = Dense(512, activation="gelu")(lh)
+po = Dense(512, activation="gelu")(po)
+rh = Dense(512, activation="gelu")(rh)
+
+x = tf.concat((lips, lh, po, rh), axis=2)
+# x = tf.reduce_mean(x, axis=3)
+for n in embedding_units:
+    x = dense_block(n)(x)
+x = Transformer(num_blocks=4)(x)
+x = tf.reduce_sum(x, axis=1)
+dense = layers.Dense(256, activation="gelu")(x)
+drop = layers.Dropout(0.1)(x)
+
+out = layers.Dense(262, activation="softmax", name="outputs")(x)
+
+model = tf.keras.Model(inputs=inputs, outputs=out)
+model.summary()
