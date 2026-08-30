@@ -1,0 +1,14 @@
+model.evaluate(x=val_x, y=val_y)
+
+y_val_pred = model.predict(val_x, verbose=2).argmax(axis=1).astype(np.int32)
+labels = [ORD2SIGN.get(i).replace(' ', '_') for i in range(NUM_CLASSES)]
+
+val_y = val_y.astype(np.int32)
+
+from sklearn.metrics import confusion_matrix, ConfusionMatrixDisplay
+conf_matrix = confusion_matrix(val_y, y_val_pred)
+
+
+conf_matrix_disp = ConfusionMatrixDisplay(confusion_matrix=conf_matrix)
+
+# conf_matrix_disp.plot()
