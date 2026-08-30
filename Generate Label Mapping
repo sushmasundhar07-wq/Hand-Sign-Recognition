@@ -1,0 +1,56 @@
+signs = []
+paths = []
+
+root_folder = r"/kaggle/input/landmarks-include/landmark_files_all"
+
+for class_name in os.listdir(root_folder):
+    class_path = os.path.join(root_folder, class_name)
+    if not os.path.isdir(class_path):
+        continue
+
+    for file_name in os.listdir(class_path):
+        phrase = class_name
+        path = f"/kaggle/input/landmarks-include/landmark_files_all/{class_name}/{file_name}"
+        signs.append(phrase)
+        paths.append(path)
+data = {
+    'sign': signs,
+    'path': paths,
+}
+train_df = pd.DataFrame(data)
+
+# csv_filename = 'train.csv'
+# df.to_csv(csv_filename, index=False)
+# Convert Signs to Orginal Encodings
+train_df['sign_ord'] = train_df['sign'].astype('category').cat.codes
+
+# Dictionaries to translate sign <-> ordinal encoded sign
+SIGN2ORD = train_df[['sign', 'sign_ord']].set_index('sign').squeeze().to_dict()
+ORD2SIGN = train_df[['sign_ord', 'sign']].set_index('sign_ord').squeeze().to_dict()
+print(SIGN2ORD)
+
+#print(train_df['sign'].value_counts())
+#train_df.sample(10)
+if PREPROCESS:
+    # Load parquet file, preprocess it and return (features, labels)
+    def convert_row(row):
+        # Here row is the tuple from from iterrows()
+        x = torch.tensor(load_relevant_data_subset(row[1].path))
+        x = feature_preprocess(x).cpu().numpy()
+        return x, row[1].sign_ord
+    # Preprocess on entire dataset
+    def convert_and_save_data(df):
+        total = df.shape[0]
+        npdata = np.zeros((total, 30, 104, 3))
+        nplabels = np.zeros(total)
+        for i, row in tqdm(enumerate(df.iterrows()), total=total):
+            #print(row[1].file_path, row[1].sign_ord)
+            (x,y) = convert_row(row)
+            npdata[i,:,:,:] = x
+            nplabels[i] = y
+
+        # Save features and labels as npy files
+        np.save("feature_data.npy", npdata)
+        np.save("feature_labels.npy", nplabels)
+
+    convert_and_save_data(train_df)
